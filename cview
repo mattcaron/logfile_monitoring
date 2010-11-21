@@ -1,0 +1,206 @@
+#!/usr/bin/perl -w
+#
+#  usage: cview emerg alert warn [-h]
+#
+#      where emerg, alert, and warn are the numbers 0-7 from 
+#      the following list:
+#
+#               0) black
+#               1) red
+#               2) green
+#               3) yellow
+#               4) blue
+#               5) magenta
+#               6) cyan
+#               7) white
+
+# see comment at end for possible codes.
+
+use strict;
+use FileHandle;
+
+my($emerg,$alert,$warn,$norm);
+
+&main;
+
+sub main
+{
+  my($osize,$nsize);
+  my $curday=-1;
+  my $newday;
+
+my($finname)="/var/log/messages";
+
+  if (!(-e $finname)){
+    print "\nFile $finname doesn't exist. Exiting.\n\n";
+    exit(0);
+  }
+  if ($#ARGV < 2){
+    print "Insufficient arguments.\n";
+    &printusage;
+    exit(0);
+  }
+
+  $emerg="[01m[3".$ARGV[0]."m";
+  $alert="[01m[3".$ARGV[1]."m";
+  $warn="[3".$ARGV[2]."m";
+  $norm="[0m";
+
+  autoflush STDOUT 1;
+
+  $osize=&filesize($finname);
+
+  print("\n");
+  print($alert."    ---------- ");
+  print "Begin History";
+  print(" ---------- ");
+  print($norm);
+  print("\n\n");
+  if (open(FIN,"<$finname")) {
+    while (<FIN>){
+      &filterprint($_);
+    }
+  }
+  print("\n");
+  print($alert."    ---------- ");
+  print "End History";
+  print(" ---------- ");
+  print($norm);
+  print("\n\n");
+  
+  while (1){
+    ($newday)=(localtime(time))[6];
+    if ($newday != $curday){
+      $curday=$newday;
+      print("\n");
+      print($alert."    ---------- ");
+      print scalar localtime;
+      print(" ---------- ");
+      print($norm);
+      print("\n\n");
+    }
+    $nsize=&filesize($finname);
+
+    if ($nsize!=$osize){
+      if (open(FIN,"<$finname")) {
+	if ($nsize>$osize){
+	  seek(FIN,$osize,0);
+	}
+	while (<FIN>){
+	  &filterprint($_);
+	}
+	close(FIN);
+	$osize=$nsize;
+      }
+    }
+    if (getppid()==1){
+      print("Parent is init?  I quit.\n");
+      exit(0);
+    }
+    sleep(1);
+  }
+}
+
+sub filesize
+{
+  my($filename)=@_;
+  return (stat($filename))[7];
+}
+
+sub filterprint
+{
+  my($line)=@_;
+
+# stuff that should print nicely
+  if ($line =~ / portsentry\[\d+\]: attackalert: /){
+    print($emerg);
+    print($line);
+    print($norm);
+    return;
+  } elsif (($line =~ /session opened for user root by/ ) &&
+	   (!($line =~ /session opened for user root by matt/ ))) {
+    print($emerg);
+    print($line);
+    print($norm);
+    return;
+#stuff that shouldn't print at all
+  } elsif ($line =~ / gconfd /){
+    return;
+  } elsif ($line =~ / -- MARK --/){
+    return;
+  } elsif ($line =~ / modprobe: modprobe: Can\'t locate module sound-/){
+    return;
+  }
+
+  print($warn);
+  print($line);
+  print($norm);
+  return;
+}
+
+sub printusage{
+print "usage: cview emerg alert warn [-h] \n";
+print "     where emerg, alert, and warn are the numbers 0-7 from\n";
+print "     the following list:\n";
+print "\n        0) black\n";
+print "        1) red\n";
+print "        2) green\n";
+print "        3) yellow\n";
+print "        4) blue\n";
+print "        5) magenta\n";
+print "        6) cyan\n";
+print "        7) white\n";
+print " The -h is if you want a history.\n";
+print "\n";
+
+}
+
+#################################################################
+
+#################################################################
+#
+# ISO 6429 color text support.
+#
+#      In addition to the  Escape  sequences  supported  by  xterm,
+#      color_xterm supports the following sequences:
+#
+#      ESC [ 3 Ps m
+#              Set the text foreground to color Ps.
+#
+#      ESC [ 4 Ps m
+#              Set the text background to color Ps.
+#
+#      According to ISO 6429, the colors are given by:
+#               0) black
+#               1) red
+#               2) green
+#               3) yellow
+#               4) blue
+#               5) magenta
+#               6) cyan
+#               7) white
+#
+#      The actual colors that color_xterm uses are customizable as the X
+#              resources "color0", "color1", etc.
+#
+#      Color_xterm includes the 'Dynamic Colors' patch by Erik For-
+#      tune  (erik@esd.sgi.com).   This  allows  you  to change the
+#      foreground, background, etc. colors  dynamically  using  the
+#      "ESC  ]  Ps ; name BEL" escape sequence, where Ps determines
+#      the color to change and name is the name  of  the  color  to
+#      change it to.
+#              Ps = 10: Foreground
+#                   11: Background
+#                   12: Cursor
+#                   13: Mouse cursor foreground
+#                   14: Mouse cursor background
+#                   15: Tek window foreground
+#                   16: Tek window background
+#
+#      For example, to change the text color to white, you could go
+#
+#              echo "^[]10;white^G"
+#
+#      The dynamic colors are controlled using the -dc/+dc  command
+#      line option or the *dynamicColor X resource.
+#
