@@ -1,0 +1,6 @@
+cview:
+
+Watches your logfile using regexp matches to determine the color to
+print the message in. For example, intrusion detection messages show
+up in red. I typically run it as: 
+   /usr/local/apps/cv/xterm -geometry 100x5 -e /usr/local/apps/cv/cview 1 3 6
