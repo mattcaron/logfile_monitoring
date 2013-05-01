@@ -13,145 +13,180 @@
 #               5) magenta
 #               6) cyan
 #               7) white
-
+#
 # see comment at end for possible codes.
+#
+# ----------------------------------------------------------------------------
+# Copyright 2001 Tim Toolan
+# Copyright 2002 Matthew Caron
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 3
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the
+# Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor,
+# Boston, MA  02110-1301
+# USA
+# ----------------------------------------------------------------------------
 
 use strict;
 use FileHandle;
 
-my($emerg,$alert,$warn,$norm);
+my ($emerg, $alert, $warn, $norm);
 
 &main;
 
-sub main
+sub main()
 {
-  my($osize,$nsize);
-  my $curday=-1;
-  my $newday;
+    my ($osize, $nsize);
+    my $curday = -1;
+    my $newday;
 
-my($finname)="/var/log/messages";
+    my ($finname) = "/var/log/logmonitor";
 
-  if (!(-e $finname)){
-    print "\nFile $finname doesn't exist. Exiting.\n\n";
-    exit(0);
-  }
-  if ($#ARGV < 2){
-    print "Insufficient arguments.\n";
-    &printusage;
-    exit(0);
-  }
-
-  $emerg="[01m[3".$ARGV[0]."m";
-  $alert="[01m[3".$ARGV[1]."m";
-  $warn="[3".$ARGV[2]."m";
-  $norm="[0m";
-
-  autoflush STDOUT 1;
-
-  $osize=&filesize($finname);
-
-  print("\n");
-  print($alert."    ---------- ");
-  print "Begin History";
-  print(" ---------- ");
-  print($norm);
-  print("\n\n");
-  if (open(FIN,"<$finname")) {
-    while (<FIN>){
-      &filterprint($_);
+    if (!(-e $finname)) {
+        print "\nFile $finname doesn't exist. Exiting.\n\n";
+        exit(0);
     }
-  }
-  print("\n");
-  print($alert."    ---------- ");
-  print "End History";
-  print(" ---------- ");
-  print($norm);
-  print("\n\n");
+    if ($#ARGV < 2) {
+        print "Insufficient arguments.\n";
+        &printusage;
+        exit(0);
+    }
+
+    $emerg = "[01m[3".$ARGV[0]."m";
+    $alert = "[01m[3".$ARGV[1]."m";
+    $warn = "[3".$ARGV[2]."m";
+    $norm = "[0m";
+
+    autoflush STDOUT 1;
+
+    $osize = &filesize($finname);
+
+    print("\n");
+    print($alert."    ---------- ");
+    print("Begin History");
+    print(" ---------- ");
+    print($norm);
+    print("\n\n");
+    if (open(FIN,"<$finname")) {
+        while (<FIN>) {
+            &filterprint($_);
+        }
+    }
+    print("\n");
+    print($alert."    ---------- ");
+    print("End History");
+    print(" ---------- ");
+    print($norm);
+    print("\n\n");
   
-  while (1){
-    ($newday)=(localtime(time))[6];
-    if ($newday != $curday){
-      $curday=$newday;
-      print("\n");
-      print($alert."    ---------- ");
-      print scalar localtime;
-      print(" ---------- ");
-      print($norm);
-      print("\n\n");
-    }
-    $nsize=&filesize($finname);
+    while (1) {
+        ($newday) = (localtime(time))[6];
+        if ($newday != $curday) {
+            $curday=$newday;
+            print("\n");
+            print($alert."    ---------- ");
+            print(scalar localtime);
+            print(" ---------- ");
+            print($norm);
+            print("\n\n");
+        }
+        $nsize = &filesize($finname);
 
-    if ($nsize!=$osize){
-      if (open(FIN,"<$finname")) {
-	if ($nsize>$osize){
-	  seek(FIN,$osize,0);
-	}
-	while (<FIN>){
-	  &filterprint($_);
-	}
-	close(FIN);
-	$osize=$nsize;
-      }
+        if ($nsize != $osize) {
+            if (open(FIN, "<$finname")) {
+                if ($nsize > $osize) {
+                    seek(FIN, $osize, 0);
+                }
+                while (<FIN>) {
+                    &filterprint($_);
+                }
+                close(FIN);
+                $osize = $nsize;
+            }
+        }
+        if (getppid() == 1) {
+            print("Parent is init?  I quit.\n");
+            exit(0);
+        }
+        sleep(1);
     }
-    if (getppid()==1){
-      print("Parent is init?  I quit.\n");
-      exit(0);
-    }
-    sleep(1);
-  }
 }
 
-sub filesize
+sub filesize($)
 {
-  my($filename)=@_;
-  return (stat($filename))[7];
+    my ($filename) = @_;
+    return (stat($filename))[7];
 }
 
 sub filterprint
 {
-  my($line)=@_;
+    my($line) = @_;
 
-# stuff that should print nicely
-  if ($line =~ / portsentry\[\d+\]: attackalert: /){
-    print($emerg);
+    # stuff that should print nicely
+    if ($line =~ / portsentry\[\d+\]: attackalert: /) {
+        print($emerg);
+        print($line);
+        print($norm);
+        return;
+    } elsif (($line =~ /session opened for user root by/ ) &&
+             (!($line =~ /session opened for user root by matt/ ) &&
+              !($line =~ /CRON\[\d+\]:/)) || 
+             ($line =~ /POSSIBLE BREAK-IN ATTEMPT!/)) {
+        print($emerg);
+        print($line);
+        print($norm);
+        return;
+    }
+    #stuff that shouldn't print at all
+    elsif ($line =~ / gconfd / ||
+           $line =~ / -- MARK --/ ||
+           $line =~ / ratelimit\.c: \d+ events suppressed/ ||
+           $line =~ / \/usr\/bin\/rsnapshot daily: completed successfully/ ||
+           $line =~ / os-prober: debug: / ||
+           $line =~ / bonobo-activation-server / ||
+           $line =~ /CRON\[\d+\]:/ ||
+           $line =~ /ntpd\[\d+\]: failed to initialize interface for address/ ||
+           $line =~ /ntpd\[\d+\]: unable to create socket on / ||
+           $line =~ /ntpd\[\d+\]: bind\(\) fd \d+, family AF_INET6, port 123, scope 2, addr/ ||
+           $line =~ /console-kit-daemon\[\d+\]: WARNING: Couldn't connect to system bus: Failed to connect to socket \/var\/run\/dbus\/system_bus_socket: Connection refused/ ||
+           $line =~ /last message repeated \d+ times/) {
+        # note that the CRON line might be overzealous...
+        return;
+    }
+  
+    # default printing of things which might be good to know...
+    print($warn);
     print($line);
     print($norm);
     return;
-  } elsif (($line =~ /session opened for user root by/ ) &&
-	   (!($line =~ /session opened for user root by matt/ ))) {
-    print($emerg);
-    print($line);
-    print($norm);
-    return;
-#stuff that shouldn't print at all
-  } elsif ($line =~ / gconfd /){
-    return;
-  } elsif ($line =~ / -- MARK --/){
-    return;
-  } elsif ($line =~ / modprobe: modprobe: Can\'t locate module sound-/){
-    return;
-  }
-
-  print($warn);
-  print($line);
-  print($norm);
-  return;
 }
 
-sub printusage{
-print "usage: cview emerg alert warn [-h] \n";
-print "     where emerg, alert, and warn are the numbers 0-7 from\n";
-print "     the following list:\n";
-print "\n        0) black\n";
-print "        1) red\n";
-print "        2) green\n";
-print "        3) yellow\n";
-print "        4) blue\n";
-print "        5) magenta\n";
-print "        6) cyan\n";
-print "        7) white\n";
-print " The -h is if you want a history.\n";
-print "\n";
+sub printusage
+{
+    print "usage: cview emerg alert warn [-h] \n";
+    print "     where emerg, alert, and warn are the numbers 0-7 from\n";
+    print "     the following list:\n";
+    print "\n        0) black\n";
+    print "        1) red\n";
+    print "        2) green\n";
+    print "        3) yellow\n";
+    print "        4) blue\n";
+    print "        5) magenta\n";
+    print "        6) cyan\n";
+    print "        7) white\n";
+    print " The -h is if you want a history.\n";
+    print "\n";
 
 }
 
